@@ -1,22 +1,46 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Amazon;
+using Amazon.SimpleNotificationService;
+using Amazon.SimpleNotificationService.Model;
 
 namespace JustSaying.AwsTools.MessageHandling
 {
     internal class ForeignTopicArnProvider : ITopicArnProvider
     {
+        private IAmazonSimpleNotificationService _client;
 
         private readonly string _arn;
 
-        public ForeignTopicArnProvider(RegionEndpoint regionEndpoint, string accountId, string topicName)
+        public ForeignTopicArnProvider(
+            string topicArn,
+            IAmazonSimpleNotificationService client)
         {
-            _arn = $"arn:aws:sns:{regionEndpoint.SystemName}:{accountId}:{topicName}";
+            _arn = topicArn;
+            _client = client;
         }
 
-        public Task<bool> ArnExistsAsync()
+        public ForeignTopicArnProvider(
+            RegionEndpoint regionEndpoint,
+            string accountId,
+            string topicName,
+            IAmazonSimpleNotificationService client)
         {
-            // Assume foreign topics exist, we actually find out when we attempt to subscribe
-            return Task.FromResult(true);
+            _arn = $"arn:aws:sns:{regionEndpoint.SystemName}:{accountId}:{topicName}";
+            _client = client;
+        }
+
+        public async Task<bool> ArnExistsAsync()
+        {
+            bool exists = false;
+            ListTopicsResponse response;
+            do
+            {
+                response = await _client.ListTopicsAsync();
+                exists = response.Topics.Any(topic => topic.TopicArn == _arn);
+            } while (!exists && response.NextToken != null);
+
+            return exists;
         }
 
         public Task<string> GetArnAsync()

@@ -82,7 +82,7 @@ namespace JustSaying.Fluent
         public SubscriptionsBuilder ForQueue<T>(string name)
             where T : Message
         {
-            return ForQueue<T>((p) => p.WithName(name));
+            return ForQueue<T>((p) => p.WithQueue(name));
         }
 
         /// <summary>
@@ -137,7 +137,7 @@ namespace JustSaying.Fluent
         public SubscriptionsBuilder ForTopic<T>(string name)
             where T : Message
         {
-            return ForTopic<T>((p) => p.WithName(name));
+            return ForTopic<T>((p) => p.WithTopic(name));
         }
 
         /// <summary>

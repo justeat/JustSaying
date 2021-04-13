@@ -33,7 +33,7 @@ namespace JustSaying.IntegrationTests.Fluent.AwsTools
                             (config) => config.WithQueueName(UniqueName)))
                         .WithTopic<SimpleMessage>(topic => topic.WithWriteConfiguration(writeConfig => writeConfig.Encryption = new ServerSideEncryption { KmsMasterKeyId = masterSnsKeyId }))))
                 .ConfigureJustSaying(
-                    (builder) => builder.Subscriptions((options) => options.ForTopic<SimpleMessage>(topic => topic.WithName(UniqueName))))
+                    (builder) => builder.Subscriptions((options) => options.ForTopic<SimpleMessage>(topic => topic.WithTopic(UniqueName))))
                 .AddSingleton(handler);
 
             string content = Guid.NewGuid().ToString();

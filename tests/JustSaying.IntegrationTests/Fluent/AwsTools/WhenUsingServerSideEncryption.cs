@@ -33,7 +33,7 @@ namespace JustSaying.IntegrationTests.Fluent.AwsTools
                             (config) => config.WithQueueName(UniqueName).WithEncryption(masterKeyId)))))
                 .ConfigureJustSaying(
                     (builder) => builder.Subscriptions((options) => options.ForQueue<SimpleMessage>(
-                        (queue) => queue.WithName(UniqueName).WithReadConfiguration(
+                        (queue) => queue.WithQueue(UniqueName).WithReadConfiguration(
                             (config) => config.WithEncryption(masterKeyId)))))
                 .AddSingleton<IHandlerAsync<SimpleMessage>>(handler);
 

@@ -29,8 +29,8 @@ namespace JustSaying.IntegrationTests.Fluent.AwsTools
             var queue = new SqsQueueByName(
                 Region,
                 UniqueName,
-                client,
                 1,
+                client,
                 loggerFactory);
 
             await queue.CreateAsync(

@@ -43,21 +43,21 @@ namespace JustSaying.UnitTests.AwsTools.MessageHandling.Sqs
         [Fact]
         public async Task IncorrectQueueNameDoNotMatch()
         {
-            var sqsQueueByName = new SqsQueueByName(RegionEndpoint.EUWest1, "some-queue-name1", _client, RetryCount, _log);
+            var sqsQueueByName = new SqsQueueByName(RegionEndpoint.EUWest1, "some-queue-name1", RetryCount, _client, _log);
             (await sqsQueueByName.ExistsAsync()).ShouldBeFalse();
         }
 
         [Fact]
         public async Task IncorrectPartialQueueNameDoNotMatch()
         {
-            var sqsQueueByName = new SqsQueueByName(RegionEndpoint.EUWest1, "some-queue", _client, RetryCount, _log);
+            var sqsQueueByName = new SqsQueueByName(RegionEndpoint.EUWest1, "some-queue", RetryCount, _client, _log);
             (await sqsQueueByName.ExistsAsync()).ShouldBeFalse();
         }
 
         [Fact]
         public async Task CorrectQueueNameShouldMatch()
         {
-            var sqsQueueByName = new SqsQueueByName(RegionEndpoint.EUWest1, "some-queue-name", _client, RetryCount, _log);
+            var sqsQueueByName = new SqsQueueByName(RegionEndpoint.EUWest1, "some-queue-name", RetryCount, _client, _log);
             (await sqsQueueByName.ExistsAsync()).ShouldBeTrue();
         }
     }

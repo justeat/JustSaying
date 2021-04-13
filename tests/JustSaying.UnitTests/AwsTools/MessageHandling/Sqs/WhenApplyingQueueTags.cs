@@ -70,7 +70,7 @@ namespace JustSaying.UnitTests.AwsTools.MessageHandling.Sqs
         public async Task TagsAreAppliedToParentAndErrorQueues()
         {
             // Arrange
-            var sut = new SqsQueueByName(RegionEndpoint.EUWest1, QueueName, _client, 3, NullLoggerFactory.Instance);
+            var sut = new SqsQueueByName(RegionEndpoint.EUWest1, QueueName, 3, _client, NullLoggerFactory.Instance);
 
             var config = new SqsReadConfiguration(SubscriptionType.ToTopic)
             {
@@ -92,7 +92,7 @@ namespace JustSaying.UnitTests.AwsTools.MessageHandling.Sqs
         public async Task TagsAreNotAppliedIfNoneAreProvided()
         {
             // Arrange
-            var sut = new SqsQueueByName(RegionEndpoint.EUWest1, QueueName, _client, 3, NullLoggerFactory.Instance);
+            var sut = new SqsQueueByName(RegionEndpoint.EUWest1, QueueName, 3, _client, NullLoggerFactory.Instance);
 
             // Act
             await sut.EnsureQueueAndErrorQueueExistAndAllAttributesAreUpdatedAsync(new SqsReadConfiguration(SubscriptionType.ToTopic));

@@ -14,7 +14,7 @@ namespace JustSaying.IntegrationTests.Fluent
                 .Publications((options) => options.WithQueue<T>(name))
                 .Subscriptions((options) => options.ForQueue<T>(subscriptionBuilder =>
                 {
-                    subscriptionBuilder.WithName(name);
+                    subscriptionBuilder.WithQueue(name);
                     configure?.Invoke(subscriptionBuilder);
                 }));
         }
@@ -27,7 +27,7 @@ namespace JustSaying.IntegrationTests.Fluent
                 .Publications((options) => options.WithTopic<T>())
                 .Subscriptions((options) => options.ForTopic<T>(subscriptionBuilder =>
                 {
-                    subscriptionBuilder.WithName(name);
+                    subscriptionBuilder.WithQueue(name);
                     configure?.Invoke(subscriptionBuilder);
                 }));
         }

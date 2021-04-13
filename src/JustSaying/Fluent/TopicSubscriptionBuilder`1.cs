@@ -24,9 +24,14 @@ namespace JustSaying.Fluent
         { }
 
         /// <summary>
-        /// Gets or sets the topic name.
+        /// Gets of sets the name of the queue
         /// </summary>
-        private string TopicName { get; set; } = string.Empty;
+        private string Queue { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the topic name or Arn.
+        /// </summary>
+        private string Topic { get; set; } = string.Empty;
 
         /// <summary>
         /// Gets or sets a delegate to a method to use to configure SNS reads.
@@ -34,33 +39,126 @@ namespace JustSaying.Fluent
         private Action<SqsReadConfiguration> ConfigureReads { get; set; }
 
         /// <summary>
+        /// Is the queue named via a naming strategy via the subscription data type (true) or passed in (false)
+        /// </summary>
+        private bool HasDefaultQueueName { get; set; } = true;
+
+        /// <summary>
+        /// Do we supply an ARN and not use the name at all?
+        /// </summary>
+        public bool HasQueueArnNotName { get; set; }
+
+        /// <summary>
+        /// Just use the naming convention to create the topic name from type name
+        /// </summary>
+        private bool HasDefaultTopicName { get; set; } = true;
+
+        /// <summary>
+        /// Do we supply an ARN and not use the name at all?
+        /// </summary>
+        private bool HasTopicArnNotName { get; set; }
+
+        /// <summary>
+        /// What should we do about required infrastructure
+        /// </summary>
+        private InfrastructureAction InfrastructureAction { get; set; } = InfrastructureAction.CreateIfMissing;
+
+        /// <summary>
         /// Gets the tags to add to the queue.
         /// </summary>
         private Dictionary<string, string> Tags { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Configures that the <see cref="ITopicNamingConvention"/> will create the topic name that should be used.
+        /// Configures that the queue name will be set to that of the topic
         /// </summary>
-        /// <returns>
-        /// The current <see cref="TopicSubscriptionBuilder{T}"/>.
-        /// </returns>
-        public TopicSubscriptionBuilder<T> IntoDefaultTopic()
-            => WithName(string.Empty);
+        /// <returns>The current <see cref="TopicSubscriptionBuilder{T}"/>> </returns>
+        public TopicSubscriptionBuilder<T> UsingDefaultQueue() => WithQueue();
+
 
         /// <summary>
-        /// Configures the name of the topic.
+        /// Configures that the <see cref="ITopicNamingConvention"/> will create the topic topicName that should be used.
         /// </summary>
-        /// <param name="name">The name of the topic to subscribe to.</param>
         /// <returns>
         /// The current <see cref="TopicSubscriptionBuilder{T}"/>.
         /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// <paramref name="name"/> is <see langword="null"/>.
-        /// </exception>
-        public TopicSubscriptionBuilder<T> WithName(string name)
+        public TopicSubscriptionBuilder<T> IntoDefaultTopic() => WithTopic();
+
+        public TopicSubscriptionBuilder<T> WithQueue(string queueName = null, string queueArn = null)
         {
-            TopicName = name ?? throw new ArgumentNullException(nameof(name));
+            bool emptyName = string.IsNullOrEmpty(queueName);
+            bool emptyArn = string.IsNullOrEmpty(queueArn);
+
+            if (!emptyArn && !emptyName)
+            {
+                HasDefaultQueueName = true;
+                HasQueueArnNotName = false;
+            }
+
+            //if we supply both, just use the Arn
+            if (!emptyArn)
+            {
+                HasQueueArnNotName = true;
+                HasDefaultQueueName = false;
+                Queue = queueArn;
+            }
+
+            if (!emptyName)
+            {
+                HasDefaultQueueName = false;
+                HasQueueArnNotName = false;
+                Queue = queueName;
+            }
+
             return this;
+
+        }
+
+       /// <summary>
+        /// We need a topic to send a message to. Do we want to create it, or do we want to validate it exists?
+        /// </summary>
+        /// <param name="action">The action to take with respect to topics</param>
+        /// <returns></returns>
+        public TopicSubscriptionBuilder<T> WithInfrastructure(InfrastructureAction action)
+        {
+            InfrastructureAction = action;
+            return this;
+        }
+
+        /// <summary>
+        /// Overrides the policy of generating the topic from the type name, and allows it to be passed in instead
+        /// </summary>
+        /// <param name="topicName">The topic name to use</param>
+        /// <param name="topicARN">We do not supply a name, instead use this externally created Arn instead. Should be used with validate infrastructure only</param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        public TopicSubscriptionBuilder<T> WithTopic(string topicName = null, string topicARN = null)
+        {
+            bool emptyName = string.IsNullOrEmpty(topicName);
+            bool emptyArn = string.IsNullOrEmpty(topicARN);
+
+            if (!emptyArn && !emptyName)
+            {
+                HasDefaultTopicName = true;
+                HasTopicArnNotName = false;
+            }
+
+            //if we supply both, just use the Arn
+            if (!emptyArn)
+            {
+                HasTopicArnNotName = true;
+                HasDefaultTopicName = false;
+                Topic = topicARN;
+            }
+
+            if (!emptyName)
+            {
+                HasDefaultTopicName = false;
+                HasTopicArnNotName = false;
+                Topic = topicName;
+            }
+
+            return this;
+
         }
 
         /// <summary>
@@ -154,7 +252,6 @@ namespace JustSaying.Fluent
 
             var subscriptionConfig = new SqsReadConfiguration(SubscriptionType.ToTopic)
             {
-                QueueName = TopicName,
                 Tags = Tags
             };
 
@@ -162,8 +259,24 @@ namespace JustSaying.Fluent
 
             ConfigureReads?.Invoke(subscriptionConfig);
 
-            subscriptionConfig.ApplyTopicNamingConvention<T>(config.TopicNamingConvention);
-            subscriptionConfig.ApplyQueueNamingConvention<T>(config.QueueNamingConvention);
+            if (HasDefaultTopicName)
+            {
+                subscriptionConfig.ApplyTopicNamingConvention<T>(config.TopicNamingConvention);
+            }
+            else
+            {
+                subscriptionConfig.TopicName = Topic;
+            }
+
+            if (HasDefaultQueueName)
+            {
+                subscriptionConfig.ApplyQueueNamingConvention<T>(config.QueueNamingConvention);
+            }
+            else
+            {
+                subscriptionConfig.QueueName = Queue;
+            }
+
             subscriptionConfig.SubscriptionGroupName ??= subscriptionConfig.QueueName;
             subscriptionConfig.PublishEndpoint = subscriptionConfig.TopicName;
             subscriptionConfig.MiddlewareConfiguration = subscriptionConfig.MiddlewareConfiguration;
@@ -173,13 +286,16 @@ namespace JustSaying.Fluent
                 config.Region,
                 bus.SerializationRegister,
                 subscriptionConfig,
-                config.MessageSubjectProvider);
+                config.MessageSubjectProvider,
+                InfrastructureAction,
+                HasQueueArnNotName,
+                HasTopicArnNotName);
 
             bus.AddStartupTask(queueWithStartup.StartupTask);
             bus.AddQueue(subscriptionConfig.SubscriptionGroupName, queueWithStartup.Queue);
 
             logger.LogInformation(
-                "Created SQS topic subscription on topic '{TopicName}' and queue '{QueueName}'.",
+                "Created SQS topic subscription on topic '{Topic}' and queue '{QueueName}'.",
                 subscriptionConfig.TopicName,
                 subscriptionConfig.QueueName);
 
@@ -202,10 +318,12 @@ namespace JustSaying.Fluent
             bus.AddMessageMiddleware<T>(subscriptionConfig.QueueName, handlerMiddleware);
 
             logger.LogInformation(
-                "Added a message handler for message type for '{MessageType}' on topic '{TopicName}' and queue '{QueueName}'.",
+                "Added a message handler for message type for '{MessageType}' on topic '{Topic}' and queue '{QueueName}'.",
                 typeof(T),
                 subscriptionConfig.TopicName,
                 subscriptionConfig.QueueName);
         }
+
+
     }
 }

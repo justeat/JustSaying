@@ -35,7 +35,7 @@ namespace JustSaying.IntegrationTests.Fluent.Subscribing
                 .ConfigureJustSaying(
                     (builder) => builder.Subscriptions(
                         (options) => options.ForQueue<SimpleMessage>(
-                            (queue) => queue.WithName(UniqueName)))
+                            (queue) => queue.WithQueue(UniqueName)))
                         .Services(c => c.WithMessageMonitoring(() => monitor)))
                 .AddSingleton<IHandlerAsync<SimpleMessage>>(handler);
 

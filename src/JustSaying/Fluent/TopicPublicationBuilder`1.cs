@@ -19,7 +19,7 @@ namespace JustSaying.Fluent
     public sealed class TopicPublicationBuilder<T> : IPublicationBuilder<T>
         where T : Message
     {
-        /// <summary>
+       /// <summary>
         /// Initializes a new instance of the <see cref="TopicPublicationBuilder{T}"/> class.
         /// </summary>
         internal TopicPublicationBuilder()
@@ -34,6 +34,26 @@ namespace JustSaying.Fluent
         /// Gets the tags to add to the topic.
         /// </summary>
         private Dictionary<string, string> Tags { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Do we override the name of the topic from the infer from type approach
+        /// </summary>
+        private bool HasNameOverride { get; set; }
+
+        /// <summary>
+        /// Do we supply an ARN and not use the name at all?
+        /// </summary>
+        private bool HasArnNotName { get; set; }
+
+        /// <summary>
+        /// What should we do about required infrastructure
+        /// </summary>
+        private InfrastructureAction InfrastructureAction { get; set; } = InfrastructureAction.CreateIfMissing;
+
+        /// <summary>
+        /// The topic is supplied instead of generated from the message type name
+        /// </summary>
+        private string Topic { get; set; }
 
         /// <summary>
         /// Configures the SNS write configuration.
@@ -114,6 +134,60 @@ namespace JustSaying.Fluent
             return this;
         }
 
+        /// <summary>
+        /// Overrides the policy of generating the topic from the type name, and allows it to be passed in instead
+        /// </summary>
+        /// <param name="topicName">The topic name to use</param>
+        /// <param name="topicARN">We do not supply a name, instead use this externally created Arn instead. Should be used with validate infrastructure only</param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        public TopicPublicationBuilder<T> WithTopic(string topicName = null, string topicARN = null)
+        {
+            bool emptyName = string.IsNullOrEmpty(topicName);
+            bool emptyArn = string.IsNullOrEmpty(topicARN);
+
+            if (emptyName && emptyArn)
+            {
+                throw new InvalidOperationException("You must supply either a topic name or an ARN to use this override");
+            }
+
+            //if we supply both, just use the Arn
+            if (!emptyArn && !emptyName)
+            {
+                HasArnNotName = true;
+                HasNameOverride = false;
+                Topic = topicARN;
+            }
+
+            if (!emptyName && emptyArn)
+            {
+                HasNameOverride = true;
+                HasArnNotName = false;
+                Topic = topicName;
+            }
+
+            if (!emptyArn && emptyName)
+            {
+                HasArnNotName = true;
+                HasNameOverride = false;
+                Topic = topicARN;
+            }
+
+            return this;
+
+        }
+
+        /// <summary>
+        /// We need a topic to send a message to. Do we want to create it, or do we want to validate it exists?
+        /// </summary>
+        /// <param name="action">The action to take with respect to topics</param>
+        /// <returns></returns>
+        public TopicPublicationBuilder<T> WithInfastructure(InfrastructureAction action)
+        {
+            InfrastructureAction = action;
+            return this;
+        }
+
         /// <inheritdoc />
         void IPublicationBuilder<T>.Configure(
             JustSayingBus bus,
@@ -130,7 +204,14 @@ namespace JustSaying.Fluent
             var readConfiguration = new SqsReadConfiguration(SubscriptionType.ToTopic);
             var writeConfiguration = new SnsWriteConfiguration();
             ConfigureWrites?.Invoke(writeConfiguration);
-            readConfiguration.ApplyTopicNamingConvention<T>(config.TopicNamingConvention);
+
+            if (!HasNameOverride && !HasArnNotName)
+                readConfiguration.ApplyTopicNamingConvention<T>(config.TopicNamingConvention);
+            else if (HasArnNotName || HasNameOverride)
+                readConfiguration.TopicName = Topic;
+
+            if (HasArnNotName && InfrastructureAction != InfrastructureAction.ValidateExists)
+                throw new Exception($"The only action we can take with an Arn is to validate, not create");
 
             bus.SerializationRegister.AddSerializer<T>();
 
@@ -142,7 +223,8 @@ namespace JustSaying.Fluent
                 bus.SerializationRegister,
                 loggerFactory,
                 writeConfiguration,
-                config.MessageSubjectProvider)
+                config.MessageSubjectProvider,
+                topicNameIsArn: HasArnNotName)
             {
                 MessageResponseLogger = config.MessageResponseLogger,
                 Tags = Tags
@@ -151,20 +233,30 @@ namespace JustSaying.Fluent
 
             async Task StartupTask()
             {
-                if (writeConfiguration.Encryption != null)
+                if (InfrastructureAction == InfrastructureAction.CreateIfMissing)
                 {
-                    await eventPublisher.CreateWithEncryptionAsync(writeConfiguration.Encryption)
+
+                    if (writeConfiguration.Encryption != null)
+                    {
+                        await eventPublisher.CreateWithEncryptionAsync(writeConfiguration.Encryption)
+                            .ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await eventPublisher.CreateAsync().ConfigureAwait(false);
+                    }
+
+                    await eventPublisher.EnsurePolicyIsUpdatedAsync(config.AdditionalSubscriberAccounts)
                         .ConfigureAwait(false);
+
+                    await eventPublisher.ApplyTagsAsync().ConfigureAwait(false);
                 }
-                else
+                else if (InfrastructureAction == InfrastructureAction.ValidateExists)
                 {
-                    await eventPublisher.CreateAsync().ConfigureAwait(false);
+                    var exists = await eventPublisher.ExistsAsync().ConfigureAwait(false);
+                    if (!exists)
+                        throw new InvalidOperationException($"The topic {eventPublisher.TopicName} does not exist and infrastructure was set to validate");
                 }
-
-                await eventPublisher.EnsurePolicyIsUpdatedAsync(config.AdditionalSubscriberAccounts)
-                    .ConfigureAwait(false);
-
-                await eventPublisher.ApplyTagsAsync().ConfigureAwait(false);
             }
 
             bus.AddStartupTask(StartupTask);

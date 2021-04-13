@@ -39,7 +39,7 @@ namespace JustSaying.IntegrationTests.Fluent.Subscribing
                     var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
                     var client = clientFactory.GetSqsClient(Region);
 
-                    var queue = new SqsQueueByName(Region, UniqueName, client, 0, loggerFactory);
+                    var queue = new SqsQueueByName(Region, UniqueName, 0, client, loggerFactory);
 
                     await Patiently.AssertThatAsync(OutputHelper, () => queue.ExistsAsync(), 60.Seconds());
 

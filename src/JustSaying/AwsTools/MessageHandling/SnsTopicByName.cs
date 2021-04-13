@@ -16,6 +16,7 @@ namespace JustSaying.AwsTools.MessageHandling
     public class SnsTopicByName : SnsTopicBase
     {
         private readonly ILogger _logger;
+        private bool _topicNameIsArn;
 
         public string TopicName { get; }
         public IDictionary<string, string> Tags { get; set; }
@@ -39,10 +40,13 @@ namespace JustSaying.AwsTools.MessageHandling
             IMessageSerializationRegister serializationRegister,
             ILoggerFactory loggerFactory,
             SnsWriteConfiguration snsWriteConfiguration,
-            IMessageSubjectProvider messageSubjectProvider)
+            IMessageSubjectProvider messageSubjectProvider,
+            bool topicNameIsArn = false)
             : base(serializationRegister, loggerFactory, snsWriteConfiguration, messageSubjectProvider)
         {
             TopicName = topicName;
+            _topicNameIsArn = topicNameIsArn;
+
             Client = client;
             _logger = loggerFactory.CreateLogger("JustSaying");
         }
@@ -97,15 +101,50 @@ namespace JustSaying.AwsTools.MessageHandling
             }
 
             _logger.LogInformation("Checking for existence of the topic '{TopicName}'.", TopicName);
-            var topic = await Client.FindTopicAsync(TopicName).ConfigureAwait(false);
-
-            if (topic != null)
+            if (_topicNameIsArn)
             {
-                Arn = topic.TopicArn;
-                return true;
+                bool topicExists = await CheckTopicExistsByArn();
+                if (topicExists)
+                {
+                    Arn = TopicName;
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
+            else
+            {
+                Topic topic = await CheckTopicExistsByName();
 
-            return false;
+                if (topic != null)
+                {
+                    Arn = topic.TopicArn;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        private async Task<bool> CheckTopicExistsByArn()
+        {
+            bool exists = false;
+            ListTopicsResponse response;
+            do
+            {
+                response = await Client.ListTopicsAsync();
+                exists = response.Topics.Any(topic => topic.TopicArn == TopicName);
+            } while (!exists && response.NextToken != null);
+
+            return exists;
+        }
+
+        private async Task<Topic> CheckTopicExistsByName()
+        {
+            var topic = await Client.FindTopicAsync(TopicName).ConfigureAwait(false);
+            return topic;
         }
 
         public async Task CreateAsync()

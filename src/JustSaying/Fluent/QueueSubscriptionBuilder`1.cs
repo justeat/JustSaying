@@ -27,9 +27,15 @@ namespace JustSaying.Fluent
         { }
 
         /// <summary>
-        /// Gets or sets the queue name.
+        /// Gets or sets the queue queueName.
         /// </summary>
         private string QueueName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Gets or sets the topic queueName or Arn.
+        /// </summary>
+        private string Topic { get; set; } = string.Empty;
+
 
         /// <summary>
         /// Gets or sets a delegate to a method to use to configure SQS reads.
@@ -37,32 +43,78 @@ namespace JustSaying.Fluent
         private Action<SqsReadConfiguration> ConfigureReads { get; set; }
 
         /// <summary>
+        /// Is the queue named via a naming strategy via the subscription data type (true) or passed in (false)
+        /// </summary>
+        private bool HasDefaultQueueName { get; set; }
+
+        /// <summary>
+        /// Just use the naming convention to create the topic queueName from type queueName
+        /// </summary>
+        private bool HasDefaultTopicName { get; set; }
+
+        /// <summary>
+        /// Do we override the queueName of the topic from the infer from type approach
+        /// </summary>
+        private bool HasNameOverride { get; set; }
+
+        /// <summary>
+        /// Do we supply an ARN and not use the queueName at all?
+        /// </summary>
+        private bool HasArnNotName { get; set; }
+
+        /// <summary>
+        /// What should we do about required infrastructure
+        /// </summary>
+        private InfrastructureAction InfrastructureAction { get; set; } = InfrastructureAction.CreateIfMissing;
+
+        /// <summary>
         /// Gets the tags to add to the queue.
         /// </summary>
         private Dictionary<string, string> Tags { get; } = new(StringComparer.Ordinal);
 
         /// <summary>
-        /// Configures that the <see cref="IQueueNamingConvention"/> will create the queue name that should be used.
+        /// Configures that the <see cref="IQueueNamingConvention"/> will create the queue queueName that should be used.
         /// </summary>
         /// <returns>
         /// The current <see cref="QueueSubscriptionBuilder{T}"/>.
         /// </returns>
         public QueueSubscriptionBuilder<T> WithDefaultQueue()
-            => WithName(string.Empty);
+            => WithQueue(string.Empty);
 
         /// <summary>
-        /// Configures the name of the queue.
+        /// What should we do about infrastructure requirements
         /// </summary>
-        /// <param name="name">The name of the queue to subscribe to.</param>
+        /// <param name="action">What action should we take</param>
+        /// <returns></returns>
+        public QueueSubscriptionBuilder<T> WithInfrastructure(InfrastructureAction action)
+        {
+            InfrastructureAction = action;
+            return this;
+        }
+
+        /// <summary>
+        /// Configures the queueName of the queue.
+        /// </summary>
+        /// <param name="queueName">The queueName of the queue to subscribe to.</param>
         /// <returns>
         /// The current <see cref="QueueSubscriptionBuilder{T}"/>.
         /// </returns>
         /// <exception cref="ArgumentNullException">
-        /// <paramref name="name"/> is <see langword="null"/>.
+        /// <paramref name="queueName"/> is <see langword="null"/>.
         /// </exception>
-        public QueueSubscriptionBuilder<T> WithName(string name)
+        public QueueSubscriptionBuilder<T> WithQueue(string queueName)
         {
-            QueueName = name ?? throw new ArgumentNullException(nameof(name));
+            if (string.IsNullOrEmpty(queueName))
+            {
+                HasDefaultQueueName = true;
+            }
+            else
+            {
+                QueueName = queueName;
+                HasDefaultQueueName = false;
+            }
+
+
             return this;
         }
 
@@ -106,6 +158,40 @@ namespace JustSaying.Fluent
         {
             ConfigureReads = configure ?? throw new ArgumentNullException(nameof(configure));
             return this;
+        }
+
+        /// <summary>
+        /// Overrides the policy of generating the topic from the type queueName, and allows it to be passed in instead
+        /// </summary>
+        /// <param name="topicName">The topic queueName to use</param>
+        /// <param name="topicARN">We do not supply a queueName, instead use this externally created Arn instead. Should be used with validate infrastructure only</param>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        public QueueSubscriptionBuilder<T> WithTopic(string topicName = null, string topicARN = null)
+        {
+            bool emptyName = string.IsNullOrEmpty(topicName);
+            bool emptyArn = string.IsNullOrEmpty(topicARN);
+
+            if (!emptyArn && !emptyName)
+            {
+                HasDefaultTopicName = true;
+            }
+
+            //if we supply both, just use the Arn
+            if (!emptyArn)
+            {
+                HasArnNotName = true;
+                Topic = topicARN;
+            }
+
+            if (!emptyName)
+            {
+                HasNameOverride = true;
+                Topic = topicName;
+            }
+
+            return this;
+
         }
 
         /// <summary>
@@ -158,6 +244,7 @@ namespace JustSaying.Fluent
             var subscriptionConfig = new SqsReadConfiguration(SubscriptionType.PointToPoint)
             {
                 QueueName = QueueName,
+                TopicName = Topic,
                 Tags = Tags
             };
 
@@ -165,13 +252,21 @@ namespace JustSaying.Fluent
 
             var config = bus.Config;
 
-            subscriptionConfig.ApplyTopicNamingConvention<T>(config.TopicNamingConvention);
-            subscriptionConfig.ApplyQueueNamingConvention<T>(config.QueueNamingConvention);
+            if (HasDefaultTopicName)
+            {
+                subscriptionConfig.ApplyTopicNamingConvention<T>(config.TopicNamingConvention);
+            }
+
+            if (HasDefaultQueueName)
+            {
+                subscriptionConfig.ApplyQueueNamingConvention<T>(config.QueueNamingConvention);
+            }
+
             subscriptionConfig.SubscriptionGroupName ??= subscriptionConfig.QueueName;
             subscriptionConfig.MiddlewareConfiguration = subscriptionConfig.MiddlewareConfiguration;
             subscriptionConfig.Validate();
 
-            var queue = creator.EnsureQueueExists(config.Region, subscriptionConfig);
+            var queue = creator.EnsureQueueExists(config.Region, HasArnNotName, subscriptionConfig);
             bus.AddStartupTask(queue.StartupTask);
 
             bus.AddQueue(subscriptionConfig.SubscriptionGroupName, queue.Queue);
@@ -205,5 +300,5 @@ namespace JustSaying.Fluent
                 subscriptionConfig.TopicName,
                 subscriptionConfig.QueueName);
         }
-    }
+   }
 }
