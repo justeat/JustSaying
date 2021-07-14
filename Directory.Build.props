@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <DotNetTestSdkVersion>16.10.0</DotNetTestSdkVersion>
-    <MicrosoftExtensionsDependencyInjectionVersion>5.0.1</MicrosoftExtensionsDependencyInjectionVersion>
+    <MicrosoftExtensionsDependencyInjectionVersion>5.0.2</MicrosoftExtensionsDependencyInjectionVersion>
     <NewtonsoftJsonVersion>12.0.3</NewtonsoftJsonVersion>
   </PropertyGroup>
   <PropertyGroup>
